@@ -10,7 +10,7 @@ forward-synthesis prediction transition-metal catalized reactions
     1.1  test.py ：Extract data from the. out file and write it to the data.txt file
     1.2  Read data from data.txt file, generate matrix, control 23 learning parameters, and calculate loss.
     Test results: We arrange the molecular loss from large to small, and check the corresponding molecular structure. We can find that the molecules with large loss have F, CL, Br, I and the smaller ones are N, O and other functional groups.
-    ![image](https://github.com/lexsaints/powershell/blob/master/IMG/ps2.png)
+    ![image](https://github.com/sudehong/forward-synthesis-prediction-transition-metal-catalized-reactions/tree/master/step1/haed5.jpg)
     
 ##step2: Still in process
 
