@@ -2,39 +2,22 @@ import numpy as np
 import torch
 np.random.seed(0)
 torch.manual_seed(0)
-import pandas as pd
 
-f =  open("data.txt",'r')
-lines = f.readlines()
-x = []
-Y = []
-
-for line in lines:
-    l = line.split(  )
-    x.append(l[11])
-    t = []
-    for i in l[1:11]:
-        t.append(float(i))
-    Y.append(t)
-
-print(x)
-print(Y)
-
-from rdkit import Chem
 from rdkit.Chem.Draw import IPythonConsole
 IPythonConsole.drawOptions.addAtomIndices = True
-from torch.optim import lr_scheduler
 from rdkit import Chem
-from rdkit.Chem import AllChem
-from rdkit.Chem import Draw
-from rdkit.Chem.Draw.MolDrawing import MolDrawing, DrawingOptions
+from torch import  nn
+import os
 
 
 
 class MyModel(torch.nn.Module):
   def __init__(self):
     super(MyModel, self).__init__()
-    self.w = torch.nn.Parameter(torch.randn(28,1,requires_grad =True, dtype=torch.float32))
+    self.w = torch.nn.Parameter(torch.randn(29,1,requires_grad =True, dtype=torch.float32))
+    self.hidden = nn.Linear(8, 32)
+    self.act = nn.ReLU()
+    self.output = nn.Linear(32, 1)
 
   def forward(self,x):
 
@@ -56,6 +39,7 @@ class MyModel(torch.nn.Module):
       #matrix of sp,sp2,sp3
       def get_matrix(s,p,label):
           #SP
+          matrix = torch.tensor([])
           if label == 'SP':
               es, ep = s, p
               matrix = torch.tensor([[1 / 2 * es + 1 / 2 * ep, 1 / 2 * es - 1 / 2 * ep, 0, 0],
@@ -79,10 +63,9 @@ class MyModel(torch.nn.Module):
                                       [1 / 4 * es - 1 / 4 * ep,  1 / 4 * es - 1 / 4 * ep,  1 / 4 * es + 3 / 4 * ep, 1 / 4 * es - 1 / 4 * ep],
                                       [1 / 4 * es - 1 / 4 * ep,  1 / 4 * es - 1 / 4 * ep,  1 / 4 * es - 1 / 4 * ep, 1 / 4 * es + 3 / 4 * ep]
                                       ])
-          if label == 'UNSPECIFIED':
+          if label == 'UNSPECIFIED' or label == 'S':
               es = s
               matrix = torch.tensor([es])
-
 
           return matrix
 
@@ -123,7 +106,7 @@ class MyModel(torch.nn.Module):
                   num += 6
                   if a1.GetIdx() == id:
                       break
-              elif str(a1.GetHybridization()) == 'UNSPECIFIED':
+              elif str(a1.GetHybridization()) == 'UNSPECIFIED' or str(a1.GetHybridization()) == 'S':
                   num += 1
                   if a1.GetIdx() == id:
                       break
@@ -135,6 +118,7 @@ class MyModel(torch.nn.Module):
       onsigma = self.w[18]
       onpi = self.w[19]
       cnsigama = self.w[20]
+      cnpi_15 = self.w[28]
 
       cclsigama = self.w[21]
       cfsigama = self.w[22]
@@ -159,12 +143,13 @@ class MyModel(torch.nn.Module):
           elif str(a1.GetHybridization()) == 'SP3':
               C_id = FindAtomsNumberOfH(a1.GetIdx()) - 4
               s.append([C_id, C_id + 1, C_id + 2, C_id + 3])
-          elif str(a1.GetHybridization()) == 'SP3D2':
-              C_id = FindAtomsNumberOfH(a1.GetIdx()) - 6
-              s.append([C_id, C_id + 1, C_id + 2, C_id + 3, C_id + 4, C_id + 5])
-          elif str(a1.GetHybridization()) == 'UNSPECIFIED':
+          # elif str(a1.GetHybridization()) == 'SP3D2':
+          #     C_id = FindAtomsNumberOfH(a1.GetIdx()) - 6
+          #     s.append([C_id, C_id + 1, C_id + 2, C_id + 3, C_id + 4, C_id + 5])
+          elif str(a1.GetHybridization()) == 'UNSPECIFIED' or str(a1.GetHybridization()) == 'S':
               C_id = FindAtomsNumberOfH(a1.GetIdx()) - 1
               s.append([C_id])
+
       # 为每一个 c 的pi设置一个随机取值的查找表
       p = []
       for a1 in m1H.GetAtoms():
@@ -178,11 +163,12 @@ class MyModel(torch.nn.Module):
           elif str(a1.GetHybridization()) == 'SP3':
               C_id = FindAtomsNumberOfH(a1.GetIdx()) - 4
               p.append([])
-          elif str(a1.GetHybridization()) == 'SP3D2':
-              C_id = FindAtomsNumberOfH(a1.GetIdx()) - 6
+          # elif str(a1.GetHybridization()) == 'SP3D2':
+          #     C_id = FindAtomsNumberOfH(a1.GetIdx()) - 6
+          #     p.append([])
+          elif str(a1.GetHybridization()) == 'UNSPECIFIED' or str(a1.GetHybridization()) == 'S':
               p.append([])
-          elif str(a1.GetHybridization()) == 'UNSPECIFIED':
-              p.append([])
+
 
       # 记录遍历的相邻的两个节点
       d = []
@@ -284,10 +270,9 @@ class MyModel(torch.nn.Module):
                       C2 = s[a2.GetIdx()].pop()
                       c[C1, C2] = c[C2, C1] = nnsigama
 
-              # 如果是双链 O=N
+              # 如果是双链
               if b12.GetBondTypeAsDouble() == 1.5 or b12.GetBondTypeAsDouble() == 2:
                   # O = N
-
                   if (str(a1.GetSymbol()) == 'O' and str(a2.GetSymbol()) == 'N') or (str(a1.GetSymbol()) == 'N' and str(a2.GetSymbol()) == 'O'):
                       # 一个sigama
                       C1 = s[a1.GetIdx()].pop()
@@ -308,6 +293,7 @@ class MyModel(torch.nn.Module):
                       c[C1, C2] = c[C2, C1] = ccsigma
                       ## 一个pi(, AROMATIC  or double)
                       if b12.GetBondTypeAsDouble() == 1.5:
+                          # print(smi0,a1.GetIdx(),a2.GetIdx())
                           C1 = p[a1.GetIdx()].pop()
                           C2 = p[a2.GetIdx()].pop()
                           c[C1, C2] = c[C2, C1] = ccpai_15
@@ -315,6 +301,21 @@ class MyModel(torch.nn.Module):
                           C1 = p[a1.GetIdx()].pop()
                           C2 = p[a2.GetIdx()].pop()
                           c[C1, C2] = c[C2, C1] = ccpai
+
+                  #C=N(AROMATIC,1.5)
+                  if (str(a1.GetSymbol()) == 'C' and str(a2.GetSymbol()) == 'N') or (str(a1.GetSymbol()) == 'N' and str(a2.GetSymbol()) == 'C'):
+                      # 一个sigama
+                      C1 = s[a1.GetIdx()].pop()
+                      C2 = s[a2.GetIdx()].pop()
+                      c[C1, C2] = c[C2, C1] = cnsigama
+
+                      # 一个pi
+                      C1 = p[a1.GetIdx()].pop()
+                      C2 = p[a2.GetIdx()].pop()
+                      c[C1, C2] = c[C2, C1] = cnpi_15
+
+
+
 
               # 如果是三链
               if b12.GetBondTypeAsDouble() == 3:
@@ -337,18 +338,22 @@ class MyModel(torch.nn.Module):
                       #--C=C-C#C-C=C--
                       #a2位置
                       for a3 in a2.GetNeighbors():
-                          if str(a3.GetSymbol()) == 'C':
-                              for a4 in a2.GetNeighbors():
+                          a23 = m1H.GetBondBetweenAtoms(a2.GetIdx(), a3.GetIdx())
+                          if str(a3.GetSymbol()) == 'C' and a23.GetBondTypeAsDouble() == 1:
+                              for a4 in a3.GetNeighbors():
                                   b34 = m1H.GetBondBetweenAtoms(a3.GetIdx(), a4.GetIdx())
                                   if str(a4.GetSymbol()) == 'C' and b34.GetBondTypeAsDouble() == 2:
-                                      # a3,a4额外一个pi连接
+                                      # a3,a2额外一个pi连接
                                       C1 = p[a2.GetIdx()].pop()
                                       C2 = p[a3.GetIdx()].pop()
                                       c[C1, C2] = c[C2, C1] = ccpai
+
+
                       # a1位置
                       for a3 in a1.GetNeighbors():
-                          if str(a3.GetSymbol()) == 'C':
-                              for a4 in a2.GetNeighbors():
+                          a13 = m1H.GetBondBetweenAtoms(a1.GetIdx(), a3.GetIdx())
+                          if str(a3.GetSymbol()) == 'C'and a13.GetBondTypeAsDouble() == 1:
+                              for a4 in a3.GetNeighbors():
                                   b34 = m1H.GetBondBetweenAtoms(a3.GetIdx(), a4.GetIdx())
                                   if str(a4.GetSymbol()) == 'C' and b34.GetBondTypeAsDouble() == 2:
                                       # a3,a4额外一个pi连接
@@ -368,116 +373,16 @@ class MyModel(torch.nn.Module):
           if str(a1.GetSymbol()) == 'H':
               N += 1
       n = N // 2
-      return emo[n-4:n+6]
+      # x = emo[n - 2:n + 4]
+      x = emo[n - 3:n + 5]
 
-#
-num = 100
-lr = 0.01
-criterion = torch.nn.MSELoss()
-model = MyModel()
-# optimizer = torch.optim.SGD(model.parameters(),lr)
-optimizer = torch.optim.Adam(model.parameters(),lr, weight_decay=0)
-# scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
-# scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
 
-device=torch.device("cuda"if torch.cuda.is_available() else "cpu")
+      x1 = self.hidden(x)
+      x2 = self.act(x1)
+      x3 = self.output(x2)
+      # print(x3.shape)
 
-y = torch.tensor(Y,dtype=torch.float32)
-y_pred = []
 
-xx = []
-yy = []
 
-loss_sort = []
 
-for j  in range(num):
-  optimizer.zero_grad()
-  for i in x:
-      y_pred.append(model(i))
-  y_p = torch.stack(y_pred)
-
-  loss = 0
-  for y1,y_p1,xx12 in zip(y,y_p,x):
-      loss += criterion(y1,y_p1)
-      if j == (num-1):loss_sort.append({'loss_of_each_mol':criterion(y1,y_p1).item(),'smi':xx12})
-
-  loss.requires_grad_(True)
-  loss.backward()
-  print(f'iter{j},loss {loss}')
-  optimizer.step()
-
-  y_pred.clear()
-  xx.append(j)
-  yy.append(loss.detach().numpy())
-# print(f'final parameter: {model.w}')
-
-w = {'H_es':model.w[0]
-     ,'C_es':model.w[1]
-     ,'C_ep':model.w[2]
-     ,'N_es':model.w[3],'N_ep':model.w[4]
-     ,'O_es':model.w[5],'O_ep':model.w[6]
-     ,'F_es':model.w[7],'F_ep':model.w[8]
-     ,'Cl_es':model.w[9],'Cl_ep':model.w[10]
-    ,'Br_es':model.w[11],'Br_ep':model.w[12]
-    ,'I_es':model.w[13],'I_ep':model.w[14]
-     ,'ccsigma' : model.w[15]
-    ,'chsigma' : model.w[16]
-    ,'ccpai' : model.w[17]
-    ,'onsigma' : model.w[18]
-    ,'onpi' : model.w[19]
-    ,'cnsigama' : model.w[20]
-    ,'cclsigama' : model.w[21]
-    ,'cfsigama' : model.w[22]
-    ,'cosigama' : model.w[23]
-    ,'cisigama' : model.w[24]
-    ,'nhsigama' : model.w[25]
-    ,'nnsigama' : model.w[26] }
-
-# w1 = sorted(w.items(), key=lambda x: x[1])
-for keys,values in w.items():
-    print(keys,values)
-
-df = pd.DataFrame(loss_sort)
-# df.reset_index(drop=True)
-
-df.sort_values(by="loss_of_each_mol",inplace=True,ascending=False)
-print(df)
-print(df.head(5))
-print(df.tail(5))
-
-smis_head5 = df.head(5)['smi'].values.tolist()
-mols = []
-for smi in smis_head5:
-    mol = Chem.MolFromSmiles(smi)
-    mols.append(mol)
-
-img = Draw.MolsToGridImage(
-    mols,
-    molsPerRow=4,
-    subImgSize=(700,700),
-    legends=['' for x in mols]
-    ,returnPNG=False
-)
-img.save('head5.jpg')
-
-smis_tail5 = df.tail(5)['smi'].values.tolist()
-mols = []
-for smi in smis_tail5:
-    mol = Chem.MolFromSmiles(smi)
-    mols.append(mol)
-
-img = Draw.MolsToGridImage(
-    mols,
-    molsPerRow=4,
-    subImgSize=(700,700),
-    legends=['' for x in mols]
-    ,returnPNG=False
-)
-img.save('tail5.jpg')
-
-import matplotlib.pyplot as plt
-plt.plot(xx,yy)
-plt.xlabel('epcho')
-plt.ylabel('loss')
-plt.title('randn')
-plt.show()
+      return x3
